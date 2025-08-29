@@ -11,22 +11,17 @@ export interface Cell {
 const CellResultSchema = z.object({ resultValue: z.string() });
 
 // Asynchronously obtain the next value for a cell by sending context to the model.
+// NOTE: Grid is toroidally wrapped, so neighbors are never null.
 export async function kernel(
   helper: OpenAIHelper,
   userPrompt: string,
-  top: Cell | null,
-  bottom: Cell | null,
-  left: Cell | null,
-  right: Cell | null,
+  top: Cell,
+  bottom: Cell,
+  left: Cell,
+  right: Cell,
   current: Cell
 ): Promise<string> {
-  const composed = `${userPrompt}\n\nCurrent cell text: ${
-    current.text
-  }\nNeighbors:\n top: ${top ? top.text : "null"}\n bottom: ${
-    bottom ? bottom.text : "null"
-  }\n left: ${left ? left.text : "null"}\n right: ${
-    right ? right.text : "null"
-  }\n\nReturn strictly JSON with shape { \"resultValue\": string } where resultValue is the new text for the cell.`;
+  const composed = `${userPrompt}\n\nCurrent cell text: ${current.text}\nNeighbors (wrap-around grid):\n top: ${top.text}\n bottom: ${bottom.text}\n left: ${left.text}\n right: ${right.text}\n\nReturn strictly JSON with shape { \"resultValue\": string } where resultValue is the new text for the cell.`;
   const parsed = await helper.getStructuredWithZod(
     composed,
     CellResultSchema,

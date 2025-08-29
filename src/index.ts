@@ -34,20 +34,23 @@ async function nextGeneration(
   const snapshot: Cell[][] = current.map((row) =>
     row.map((cell) => ({ ...cell }))
   );
-  // Prepare next grid we will eventually return
   const next: Cell[][] = current.map((row) => row.map((cell) => ({ ...cell })));
 
-  // Launch all cell computations in parallel with rate limiting
   const tasks: Promise<void>[] = [];
   for (let y = 0; y < GRID_ROWS; y++) {
     for (let x = 0; x < GRID_COLS; x++) {
       const task = (async (cx: number, cy: number) => {
         await limiter.acquire();
         try {
-          const top = cy > 0 ? snapshot[cy - 1][cx] : null;
-          const bottom = cy < GRID_ROWS - 1 ? snapshot[cy + 1][cx] : null;
-          const left = cx > 0 ? snapshot[cy][cx - 1] : null;
-          const right = cx < GRID_COLS - 1 ? snapshot[cy][cx + 1] : null;
+          // Wrap indices (toroidal grid)
+          const upY = (cy - 1 + GRID_ROWS) % GRID_ROWS;
+          const downY = (cy + 1) % GRID_ROWS;
+          const leftX = (cx - 1 + GRID_COLS) % GRID_COLS;
+          const rightX = (cx + 1) % GRID_COLS;
+          const top = snapshot[upY][cx];
+          const bottom = snapshot[downY][cx];
+          const left = snapshot[cy][leftX];
+          const right = snapshot[cy][rightX];
           const newText = await kernel(
             helper,
             modelPrompt,
@@ -58,12 +61,11 @@ async function nextGeneration(
             snapshot[cy][cx]
           );
           next[cy][cx].text = newText;
-          // Update visible grid immediately for progressive feedback.
-          grid[cy][cx].text = newText;
+          grid[cy][cx].text = newText; // progressive update
           drawGrid(pInstance);
         } catch (e) {
           console.error("Kernel error", e);
-          next[cy][cx].text = snapshot[cy][cx].text; // fallback to old value
+          next[cy][cx].text = snapshot[cy][cx].text; // fallback
         } finally {
           limiter.release();
         }
