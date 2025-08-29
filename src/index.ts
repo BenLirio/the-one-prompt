@@ -1,11 +1,12 @@
 import p5 from "p5";
 import { kernel, Cell } from "./kernel";
 import { OpenAIHelper } from "./openaiHelper";
+import { layoutCellText } from "./textLayout";
 
 // Dynamic configuration
 let GRID_COLS = 5;
 let GRID_ROWS = 5;
-const CELL_SIZE = 56; // larger for readability
+const CELL_SIZE = 100; // enlarged for better text fit
 
 let grid: Cell[][] = [];
 let pInstance: p5;
@@ -57,20 +58,32 @@ function resizeGrid(newSize: number) {
 }
 
 function drawGrid(p: p5) {
-  p.background(255); // white background
-  p.fill(0); // text color only
-  p.stroke(200); // light grid lines
+  p.background(255);
+  p.fill(0);
+  p.stroke(200);
   p.strokeWeight(1);
   for (let y = 0; y < GRID_ROWS; y++) {
     for (let x = 0; x < GRID_COLS; x++) {
+      const cellX = x * CELL_SIZE;
+      const cellY = y * CELL_SIZE;
       p.noFill();
-      p.rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+      const content = grid[y][x].text;
+      const layout = layoutCellText(p, content, CELL_SIZE, {
+        maxFactor: 0.55,
+        minFactor: 0.08,
+      });
+      p.textSize(layout.fontSize);
       p.fill(0);
-      p.text(
-        grid[y][x].text,
-        x * CELL_SIZE + CELL_SIZE / 2,
-        y * CELL_SIZE + CELL_SIZE / 2 + 1
-      );
+      // Draw lines centered vertically
+      const totalTextHeight = layout.totalHeight;
+      let startY =
+        cellY + (CELL_SIZE - totalTextHeight) / 2 + layout.lineHeight * 0.8; // adjust baseline
+      for (const line of layout.lines) {
+        p.textAlign(p.CENTER, p.BASELINE);
+        p.text(line, cellX + CELL_SIZE / 2, startY);
+        startY += layout.lineHeight;
+      }
       p.noFill();
     }
   }
@@ -89,7 +102,7 @@ const sketch = (p: p5) => {
     p.createCanvas(GRID_COLS * CELL_SIZE, GRID_ROWS * CELL_SIZE).parent("app");
     grid = createGrid();
     p.textAlign(p.CENTER, p.CENTER);
-    p.textSize(CELL_SIZE * 0.5);
+    p.textSize(CELL_SIZE * 0.32); // smaller default
     p.noLoop(); // do not auto-run
     // Hook up controls
     const sizeInput = document.getElementById(
