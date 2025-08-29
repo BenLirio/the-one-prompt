@@ -1,30 +1,38 @@
-// Kernel logic separated from main sketch.
-// A Cell only has a text field. '1' means alive, anything else treated as dead.
+// Kernel now delegates cell evolution to OpenAI based on a user-provided prompt.
+// A Cell only has a text field. '1' means alive, anything else treated as dead (semantic left to the prompt).
+
+import { z } from "zod";
+import { OpenAIHelper } from "./openaiHelper";
 
 export interface Cell {
   text: string;
 }
 
-// Compute next text value for a cell based on its 4-neighborhood.
-// top/bottom/left/right can be null if out of bounds.
-export function kernel(
+const CellResultSchema = z.object({ resultValue: z.string() });
+
+// Asynchronously obtain the next value for a cell by sending context to the model.
+export async function kernel(
+  helper: OpenAIHelper,
+  userPrompt: string,
   top: Cell | null,
   bottom: Cell | null,
   left: Cell | null,
   right: Cell | null,
   current: Cell
-): string {
-  const isAlive = current.text === "1";
-  const neighbors = [top, bottom, left, right];
-  let aliveCount = 0;
-  for (const c of neighbors) {
-    if (c && c.text === "1") aliveCount++;
-  }
-  // Adapted Conway rules for 4-neighborhood (still illustrative):
-  // Survive with 2 or 3, birth with exactly 3 (same as original, though >3 is rare here).
-  if (isAlive && (aliveCount < 2 || aliveCount > 3)) return "0";
-  if (!isAlive && aliveCount === 3) return "1";
-  return current.text; // unchanged
+): Promise<string> {
+  const composed = `${userPrompt}\n\nCurrent cell text: ${
+    current.text
+  }\nNeighbors:\n top: ${top ? top.text : "null"}\n bottom: ${
+    bottom ? bottom.text : "null"
+  }\n left: ${left ? left.text : "null"}\n right: ${
+    right ? right.text : "null"
+  }\n\nReturn strictly JSON with shape { \"resultValue\": string } where resultValue is the new text for the cell.`;
+  const parsed = await helper.getStructuredWithZod(
+    composed,
+    CellResultSchema,
+    "cell_result"
+  );
+  return parsed.resultValue;
 }
 
 export {}; // ensure this file is treated as a module
