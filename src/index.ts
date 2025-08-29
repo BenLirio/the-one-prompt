@@ -1,65 +1,85 @@
 import p5 from "p5";
+import { kernel, Cell } from "./kernel";
 
-// Example Game of Life grid setup placeholders
-const CELL_SIZE = 10;
-const GRID_COLS = 40;
-const GRID_ROWS = 40;
+// Dynamic configuration
+let GRID_COLS = 5;
+let GRID_ROWS = 5;
+const CELL_SIZE = 56; // larger for readability
 
-let grid: number[][] = [];
+let grid: Cell[][] = [];
+let pInstance: p5;
 
-function createGrid(): number[][] {
+function createGrid(): Cell[][] {
   return Array.from({ length: GRID_ROWS }, () =>
-    Array.from({ length: GRID_COLS }, () => (Math.random() > 0.7 ? 1 : 0))
+    Array.from({ length: GRID_COLS }, () => ({ text: Math.random() > 0.5 ? '1' : '0' }))
   );
 }
 
-function nextGeneration(current: number[][]): number[][] {
-  const next = current.map((arr) => [...arr]);
+function nextGeneration(current: Cell[][]): Cell[][] {
+  const next: Cell[][] = current.map(row => row.map(cell => ({ ...cell })));
   for (let y = 0; y < GRID_ROWS; y++) {
     for (let x = 0; x < GRID_COLS; x++) {
-      let neighbors = 0;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          const ny = y + dy;
-          const nx = x + dx;
-          if (ny >= 0 && ny < GRID_ROWS && nx >= 0 && nx < GRID_COLS) {
-            neighbors += current[ny][nx];
-          }
-        }
-      }
-      const alive = current[y][x] === 1;
-      if (alive && (neighbors < 2 || neighbors > 3)) next[y][x] = 0; // dies
-      else if (!alive && neighbors === 3) next[y][x] = 1; // born
+      const top = y > 0 ? current[y - 1][x] : null;
+      const bottom = y < GRID_ROWS - 1 ? current[y + 1][x] : null;
+      const left = x > 0 ? current[y][x - 1] : null;
+      const right = x < GRID_COLS - 1 ? current[y][x + 1] : null;
+      next[y][x].text = kernel(top, bottom, left, right, current[y][x]);
     }
   }
   return next;
 }
 
+function resizeGrid(newSize: number) {
+  GRID_COLS = newSize;
+  GRID_ROWS = newSize;
+  grid = createGrid();
+  pInstance.resizeCanvas(GRID_COLS * CELL_SIZE, GRID_ROWS * CELL_SIZE);
+}
+
+function drawGrid(p: p5) {
+  p.background(255); // white background
+  p.fill(0); // text color only
+  p.stroke(200); // light grid lines
+  p.strokeWeight(1);
+  for (let y = 0; y < GRID_ROWS; y++) {
+    for (let x = 0; x < GRID_COLS; x++) {
+      p.noFill();
+      p.rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      p.fill(0);
+      p.text(grid[y][x].text, x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2 + 1);
+      p.noFill();
+    }
+  }
+}
+
 const sketch = (p: p5) => {
+  pInstance = p;
   p.setup = () => {
-    p.createCanvas(GRID_COLS * CELL_SIZE, GRID_ROWS * CELL_SIZE).parent("app");
+    p.createCanvas(GRID_COLS * CELL_SIZE, GRID_ROWS * CELL_SIZE).parent('app');
     grid = createGrid();
-    p.frameRate(12);
+    p.textAlign(p.CENTER, p.CENTER);
+    p.textSize(CELL_SIZE * 0.5);
+    p.noLoop(); // do not auto-run
+    // Hook up controls
+    const sizeInput = document.getElementById('gridSizeInput') as HTMLInputElement | null;
+    const resizeBtn = document.getElementById('resizeBtn');
+    const stepBtn = document.getElementById('stepBtn');
+    resizeBtn?.addEventListener('click', () => {
+      const val = sizeInput ? parseInt(sizeInput.value, 10) : GRID_COLS;
+      if (!isNaN(val) && val > 0 && val <= 50) {
+        resizeGrid(val);
+        drawGrid(p);
+      }
+    });
+    stepBtn?.addEventListener('click', () => {
+      grid = nextGeneration(grid);
+      drawGrid(p);
+    });
+    drawGrid(p);
   };
 
   p.draw = () => {
-    p.background(17);
-
-    // Draw & update
-    p.noStroke();
-    for (let y = 0; y < GRID_ROWS; y++) {
-      for (let x = 0; x < GRID_COLS; x++) {
-        if (grid[y][x]) {
-          p.fill(0, 200, 120);
-        } else {
-          p.fill(30);
-        }
-        p.rect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      }
-    }
-
-    grid = nextGeneration(grid);
+    // Intentionally empty; drawing handled manually via step
   };
 };
 
