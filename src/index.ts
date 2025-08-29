@@ -2,11 +2,17 @@ import p5 from "p5";
 import { kernel, Cell } from "./kernel";
 import { OpenAIHelper } from "./openaiHelper";
 import { layoutCellText } from "./textLayout";
+import { RateLimiter } from "./rateLimiter"; // added
 
 // Dynamic configuration
 let GRID_COLS = 5;
 let GRID_ROWS = 5;
 const CELL_SIZE = 100; // enlarged for better text fit
+
+// Rate limiter config (tweak as needed)
+const MAX_CONCURRENT = 3; // number of simultaneous OpenAI calls
+const MIN_INTERVAL_MS = 150; // spacing between starting calls
+const limiter = new RateLimiter(MAX_CONCURRENT, MIN_INTERVAL_MS);
 
 let grid: Cell[][] = [];
 let pInstance: p5;
@@ -24,29 +30,48 @@ async function nextGeneration(
   modelPrompt: string,
   current: Cell[][]
 ): Promise<Cell[][]> {
+  // Snapshot to ensure each kernel invocation sees ORIGINAL generation values
+  const snapshot: Cell[][] = current.map((row) =>
+    row.map((cell) => ({ ...cell }))
+  );
+  // Prepare next grid we will eventually return
   const next: Cell[][] = current.map((row) => row.map((cell) => ({ ...cell })));
+
+  // Launch all cell computations in parallel with rate limiting
+  const tasks: Promise<void>[] = [];
   for (let y = 0; y < GRID_ROWS; y++) {
     for (let x = 0; x < GRID_COLS; x++) {
-      const top = y > 0 ? current[y - 1][x] : null;
-      const bottom = y < GRID_ROWS - 1 ? current[y + 1][x] : null;
-      const left = x > 0 ? current[y][x - 1] : null;
-      const right = x < GRID_COLS - 1 ? current[y][x + 1] : null;
-      try {
-        next[y][x].text = await kernel(
-          helper,
-          modelPrompt,
-          top,
-          bottom,
-          left,
-          right,
-          current[y][x]
-        );
-      } catch (e) {
-        console.error("Kernel error", e);
-        next[y][x].text = current[y][x].text; // fallback
-      }
+      const task = (async (cx: number, cy: number) => {
+        await limiter.acquire();
+        try {
+          const top = cy > 0 ? snapshot[cy - 1][cx] : null;
+          const bottom = cy < GRID_ROWS - 1 ? snapshot[cy + 1][cx] : null;
+          const left = cx > 0 ? snapshot[cy][cx - 1] : null;
+          const right = cx < GRID_COLS - 1 ? snapshot[cy][cx + 1] : null;
+          const newText = await kernel(
+            helper,
+            modelPrompt,
+            top,
+            bottom,
+            left,
+            right,
+            snapshot[cy][cx]
+          );
+          next[cy][cx].text = newText;
+          // Update visible grid immediately for progressive feedback.
+          grid[cy][cx].text = newText;
+          drawGrid(pInstance);
+        } catch (e) {
+          console.error("Kernel error", e);
+          next[cy][cx].text = snapshot[cy][cx].text; // fallback to old value
+        } finally {
+          limiter.release();
+        }
+      })(x, y);
+      tasks.push(task);
     }
   }
+  await Promise.all(tasks);
   return next;
 }
 
@@ -151,9 +176,11 @@ const sketch = (p: p5) => {
         "Update the cell based on neighbors; return the same value.";
       if (stepBtn) stepBtn.disabled = true;
       stepBtn!.textContent = "Running...";
+      const start = performance.now();
       grid = await nextGeneration(rulePrompt, grid);
       drawGrid(p);
-      stepBtn!.textContent = "Step";
+      const elapsed = Math.round(performance.now() - start);
+      stepBtn!.textContent = `Step (${elapsed}ms)`;
       if (stepBtn) stepBtn.disabled = false;
     });
 
