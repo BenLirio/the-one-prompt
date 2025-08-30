@@ -41,6 +41,21 @@
     canvas {
       outline: 1px solid #333;
     }
+
+    #tokenUsage {
+      position: fixed;
+      top: 8px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: ui-monospace, monospace;
+      max-width: 260px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   </style>
 </head>
 
@@ -55,6 +70,7 @@
       <label>API Key: <input id="apiKeyInput" type="password" placeholder="sk-..." size="20" /></label>
     </div>
   </div>
+  <div id="tokenUsage">Cost: $0.0000</div>
 </body>
 
 </html>

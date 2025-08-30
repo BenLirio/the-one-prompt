@@ -17,6 +17,7 @@ const limiter = new RateLimiter(MAX_CONCURRENT, MIN_INTERVAL_MS);
 let grid: Cell[][] = [];
 let pInstance: p5;
 let helper: OpenAIHelper;
+let tokenDiv: HTMLElement | null = null; // added reference
 
 function createGrid(): Cell[][] {
   return Array.from({ length: GRID_ROWS }, () =>
@@ -24,6 +25,12 @@ function createGrid(): Cell[][] {
       text: Math.random() > 0.5 ? "1" : "0",
     }))
   );
+}
+
+function updateTokenDisplay() {
+  if (!helper || !tokenDiv) return;
+  const cum = helper.getCumulativeUsage();
+  tokenDiv.textContent = `Cost: $${cum.cost.toFixed(4)}`;
 }
 
 async function nextGeneration(
@@ -63,6 +70,7 @@ async function nextGeneration(
           next[cy][cx].text = newText;
           grid[cy][cx].text = newText; // progressive update
           drawGrid(pInstance);
+          updateTokenDisplay(); // update token usage after each call
         } catch (e) {
           console.error("Kernel error", e);
           next[cy][cx].text = snapshot[cy][cx].text; // fallback
@@ -145,6 +153,7 @@ const sketch = (p: p5) => {
     const apiKeyInput = document.getElementById(
       "apiKeyInput"
     ) as HTMLInputElement | null;
+    tokenDiv = document.getElementById("tokenUsage");
 
     if (apiKeyInput) {
       const stored = localStorage.getItem("openai_api_key");
@@ -181,12 +190,14 @@ const sketch = (p: p5) => {
       const start = performance.now();
       grid = await nextGeneration(rulePrompt, grid);
       drawGrid(p);
+      updateTokenDisplay(); // final update after generation
       const elapsed = Math.round(performance.now() - start);
       stepBtn!.textContent = `Step (${elapsed}ms)`;
       if (stepBtn) stepBtn.disabled = false;
     });
 
     drawGrid(p);
+    updateTokenDisplay();
   };
 
   p.draw = () => {
