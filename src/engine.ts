@@ -124,13 +124,15 @@ export class Engine {
     if (this.generationInProgress) return;
     if (!this.helper) return;
     if (cy < 0 || cy >= this.rows || cx < 0 || cx >= this.cols) return;
+    const key = this.cellKey(cx, cy); // compute early
+    // Prevent starting another request for the same cell while one is in flight
+    if (this.loadingCells.has(key)) return;
     const snapshot = this.snapshot();
     const upY = (cy - 1 + this.rows) % this.rows;
     const downY = (cy + 1) % this.rows;
     const leftX = (cx - 1 + this.cols) % this.cols;
     const rightX = (cx + 1) % this.cols;
     await this.limiter.acquire();
-    const key = this.cellKey(cx, cy);
     this.loadingCells.add(key);
     if (p) this.draw(p);
     try {
@@ -146,6 +148,8 @@ export class Engine {
       this.grid[cy][cx].text = newText;
     } catch (e) {
       console.error("Single cell kernel error", e);
+      const errMsg = e instanceof Error ? e.message : String(e);
+      this.grid[cy][cx].text = errMsg;
     } finally {
       this.loadingCells.delete(key);
       if (p) this.draw(p);
@@ -195,6 +199,8 @@ export class Engine {
           this.grid[cy][cx].text = newText;
         } catch (e) {
           console.error("Kernel error", e);
+          const errMsg = e instanceof Error ? e.message : String(e);
+          this.grid[cy][cx].text = errMsg;
         } finally {
           this.loadingCells.delete(key);
           if (p) this.draw(p);
