@@ -35,12 +35,29 @@ const sketch = (p: p5) => {
   p.setup = () => {
     engine = new Engine(DEFAULT_GRID_SIZE, DEFAULT_GRID_SIZE);
     engine.initHelperFromStorage();
-    p.createCanvas(engine.cols * CELL_SIZE, engine.rows * CELL_SIZE).parent(
-      "app"
-    );
+    const canvas = p
+      .createCanvas(engine.cols * CELL_SIZE, engine.rows * CELL_SIZE)
+      .parent("app") as unknown as { canvas?: HTMLCanvasElement };
     p.textAlign(p.CENTER, p.CENTER);
     p.textSize(CELL_SIZE * 0.32);
     p.noLoop();
+
+    // Explicit size fitting (no transform) to keep cells square when width constrained
+    const fitCanvas = () => {
+      const canvasEl = (p as any)?._renderer?.canvas as
+        | HTMLCanvasElement
+        | undefined;
+      if (!canvasEl) return;
+      const wrap = document.getElementById("canvasWrap");
+      const parent = wrap || canvasEl.parentElement;
+      if (!parent) return;
+      const base = engine.cols * CELL_SIZE; // intrinsic square side
+      const available = parent.clientWidth;
+      const display = Math.min(base, available);
+      canvasEl.style.width = display + "px";
+      canvasEl.style.height = display + "px"; // force square display
+    };
+    window.addEventListener("resize", fitCanvas, { passive: true });
 
     const sizeInput = document.getElementById(
       "gridSizeInput"
@@ -101,6 +118,7 @@ const sketch = (p: p5) => {
       if (!isNaN(val) && val > 0 && val <= 50) {
         engine.resize(val, p);
         engine.draw(p);
+        fitCanvas();
       }
     });
 
@@ -140,21 +158,48 @@ const sketch = (p: p5) => {
       | HTMLCanvasElement
       | undefined;
     if (canvasEl) {
-      canvasEl.addEventListener("click", (ev: MouseEvent) => {
+      const handlePoint = (clientX: number, clientY: number) => {
         const rect = canvasEl.getBoundingClientRect();
-        const mx = ev.clientX - rect.left;
-        const my = ev.clientY - rect.top;
-        const cx = Math.floor(mx / CELL_SIZE);
-        const cy = Math.floor(my / CELL_SIZE);
+        const mx = clientX - rect.left;
+        const my = clientY - rect.top;
+        // Account for CSS scaling (canvas logical size vs displayed size)
+        const scaleX = rect.width / (engine.cols * CELL_SIZE);
+        const scaleY = rect.height / (engine.rows * CELL_SIZE);
+        const cx = Math.floor(mx / (CELL_SIZE * scaleX));
+        const cy = Math.floor(my / (CELL_SIZE * scaleY));
         const rulePrompt =
           (promptInput && promptInput.value) ||
           "Update the cell based on neighbors; return the same value.";
         engine.updateSingleCell(cx, cy, rulePrompt, p);
+      };
+
+      canvasEl.addEventListener("click", (ev: MouseEvent) => {
+        handlePoint(ev.clientX, ev.clientY);
       });
+
+      let lastTouch = 0;
+      canvasEl.addEventListener(
+        "touchstart",
+        (ev: TouchEvent) => {
+          if (!ev.touches.length) return;
+          const now = Date.now();
+          // Prevent duplicate click (some browsers fire both)
+          if (now - lastTouch < 120) return;
+          lastTouch = now;
+          const t = ev.touches[0];
+          handlePoint(t.clientX, t.clientY);
+        },
+        { passive: true }
+      );
+    }
+
+    if (canvas) {
+      fitCanvas();
     }
 
     engine.draw(p);
     engine.updateTokenDisplay();
+    fitCanvas();
   };
 
   p.draw = () => {
