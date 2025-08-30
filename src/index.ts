@@ -18,6 +18,13 @@ let grid: Cell[][] = [];
 let pInstance: p5;
 let helper: OpenAIHelper;
 let tokenDiv: HTMLElement | null = null; // added reference
+let generationInProgress = false; // track full-step runs
+// Track cells currently being updated (grey them out)
+const loadingCells = new Set<string>();
+
+function cellKey(x: number, y: number) {
+  return `${x},${y}`;
+}
 
 function createGrid(): Cell[][] {
   return Array.from({ length: GRID_ROWS }, () =>
@@ -33,10 +40,51 @@ function updateTokenDisplay() {
   tokenDiv.textContent = `Cost: $${cum.cost.toFixed(4)}`;
 }
 
+async function updateSingleCell(cx: number, cy: number, rulePrompt: string) {
+  if (generationInProgress) return; // avoid conflict with full generation
+  if (!helper) return;
+  // Bounds safety
+  if (cy < 0 || cy >= GRID_ROWS || cx < 0 || cx >= GRID_COLS) return;
+  const snapshot: Cell[][] = grid.map((row) => row.map((c) => ({ ...c })));
+  // Wrap indices for neighbors
+  const upY = (cy - 1 + GRID_ROWS) % GRID_ROWS;
+  const downY = (cy + 1) % GRID_ROWS;
+  const leftX = (cx - 1 + GRID_COLS) % GRID_COLS;
+  const rightX = (cx + 1) % GRID_COLS;
+  const top = snapshot[upY][cx];
+  const bottom = snapshot[downY][cx];
+  const left = snapshot[cy][leftX];
+  const right = snapshot[cy][rightX];
+  await limiter.acquire();
+  const key = cellKey(cx, cy);
+  loadingCells.add(key);
+  drawGrid(pInstance);
+  try {
+    const newText = await kernel(
+      helper,
+      rulePrompt,
+      top,
+      bottom,
+      left,
+      right,
+      snapshot[cy][cx]
+    );
+    grid[cy][cx].text = newText;
+  } catch (e) {
+    console.error("Single cell kernel error", e);
+  } finally {
+    loadingCells.delete(key);
+    drawGrid(pInstance);
+    updateTokenDisplay();
+    limiter.release();
+  }
+}
+
 async function nextGeneration(
   modelPrompt: string,
   current: Cell[][]
 ): Promise<Cell[][]> {
+  generationInProgress = true;
   // Snapshot to ensure each kernel invocation sees ORIGINAL generation values
   const snapshot: Cell[][] = current.map((row) =>
     row.map((cell) => ({ ...cell }))
@@ -48,6 +96,9 @@ async function nextGeneration(
     for (let x = 0; x < GRID_COLS; x++) {
       const task = (async (cx: number, cy: number) => {
         await limiter.acquire();
+        const key = cellKey(cx, cy);
+        loadingCells.add(key);
+        drawGrid(pInstance);
         try {
           // Wrap indices (toroidal grid)
           const upY = (cy - 1 + GRID_ROWS) % GRID_ROWS;
@@ -69,12 +120,13 @@ async function nextGeneration(
           );
           next[cy][cx].text = newText;
           grid[cy][cx].text = newText; // progressive update
-          drawGrid(pInstance);
-          updateTokenDisplay(); // update token usage after each call
         } catch (e) {
           console.error("Kernel error", e);
           next[cy][cx].text = snapshot[cy][cx].text; // fallback
         } finally {
+          loadingCells.delete(key);
+          drawGrid(pInstance);
+          updateTokenDisplay(); // update token usage after each call
           limiter.release();
         }
       })(x, y);
@@ -82,6 +134,7 @@ async function nextGeneration(
     }
   }
   await Promise.all(tasks);
+  generationInProgress = false;
   return next;
 }
 
@@ -103,6 +156,14 @@ function drawGrid(p: p5) {
       const cellY = y * CELL_SIZE;
       p.noFill();
       p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+      // Grey overlay if loading
+      if (loadingCells.has(cellKey(x, y))) {
+        p.push();
+        p.noStroke();
+        p.fill(0, 0, 0, 60); // semi-transparent dark overlay
+        p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+        p.pop();
+      }
       const content = grid[y][x].text;
       const layout = layoutCellText(p, content, CELL_SIZE, {
         maxFactor: 0.55,
@@ -195,6 +256,23 @@ const sketch = (p: p5) => {
       stepBtn!.textContent = `Step (${elapsed}ms)`;
       if (stepBtn) stepBtn.disabled = false;
     });
+
+    // Add mouse click handler for single-cell update
+    const canvasEl = (p as any)?._renderer?.canvas as HTMLCanvasElement | undefined;
+    if (canvasEl) {
+      canvasEl.addEventListener("click", (ev: MouseEvent) => {
+        const rect = canvasEl.getBoundingClientRect();
+        const mx = ev.clientX - rect.left;
+        const my = ev.clientY - rect.top;
+        const cx = Math.floor(mx / CELL_SIZE);
+        const cy = Math.floor(my / CELL_SIZE);
+        const promptInput = document.getElementById("promptInput") as HTMLInputElement | null;
+        const rulePrompt =
+          (promptInput && promptInput.value) ||
+          "Update the cell based on neighbors; return the same value.";
+        updateSingleCell(cx, cy, rulePrompt);
+      });
+    }
 
     drawGrid(p);
     updateTokenDisplay();
