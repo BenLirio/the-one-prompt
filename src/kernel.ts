@@ -3,6 +3,9 @@
 
 import { z } from "zod";
 import { OpenAIHelper } from "./openaiHelper";
+// Allow importing markdown as a raw string (webpack asset/source)
+// @ts-ignore - handled by webpack asset/source rule
+import cellPrompt from "./cellPrompt.md";
 
 export interface Cell {
   text: string;
@@ -21,7 +24,14 @@ export async function kernel(
   right: Cell,
   current: Cell
 ): Promise<string> {
-  const composed = `${userPrompt}\n\nCurrent cell text: ${current.text}\nNeighbors (wrap-around grid):\n top: ${top.text}\n bottom: ${bottom.text}\n left: ${left.text}\n right: ${right.text}\n\nReturn strictly JSON with shape { \"resultValue\": string } where resultValue is the new text for the cell.`;
+  // Fill template placeholders
+  const composed = cellPrompt
+    .replace(/{{USER_PROMPT}}/g, userPrompt)
+    .replace(/{{CURRENT}}/g, current.text)
+    .replace(/{{TOP}}/g, top.text)
+    .replace(/{{BOTTOM}}/g, bottom.text)
+    .replace(/{{LEFT}}/g, left.text)
+    .replace(/{{RIGHT}}/g, right.text);
   const parsed = await helper.getStructuredWithZod(
     composed,
     CellResultSchema,

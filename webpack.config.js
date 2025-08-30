@@ -11,6 +11,10 @@ module.exports = {
         use: "ts-loader",
         exclude: /node_modules/,
       },
+      {
+        test: /\.md$/,
+        type: "asset/source", // allow importing markdown as string
+      },
     ],
   },
   resolve: {
