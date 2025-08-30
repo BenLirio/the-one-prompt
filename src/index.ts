@@ -4,28 +4,52 @@ import { DEFAULT_GRID_SIZE, CELL_SIZE } from "./constants";
 
 let engine: Engine;
 let pInstance: p5;
+let isRunning = false; // guard to prevent concurrent generations
 
 const runGeneration = async (
   promptInput: HTMLTextAreaElement | HTMLInputElement | null,
   stepBtn: HTMLButtonElement | null
 ) => {
+  if (isRunning) return; // already running
   if (!promptInput) return;
   const rulePrompt =
     promptInput.value ||
     "Update the cell based on neighbors; return the same value.";
-  if (stepBtn) {
-    stepBtn.disabled = true;
-    const label = stepBtn.dataset.label || "Step";
-    stepBtn.textContent = "Running...";
+
+  const mobileBtn = document.getElementById("mobileStepBtn") as
+    | HTMLButtonElement
+    | null;
+
+  // If either button is already disabled (defensive) do nothing
+  if (stepBtn?.disabled || mobileBtn?.disabled) return;
+
+  const desktopLabel = stepBtn?.dataset.label || stepBtn?.textContent || "Step";
+  const mobileLabel = mobileBtn?.dataset.label || mobileBtn?.textContent || "Step";
+
+  try {
+    isRunning = true;
+    if (stepBtn) {
+      stepBtn.disabled = true;
+      stepBtn.dataset.label = desktopLabel; // cache
+      stepBtn.textContent = "Running...";
+    }
+    if (mobileBtn) {
+      mobileBtn.disabled = true;
+      mobileBtn.dataset.label = mobileLabel;
+      mobileBtn.textContent = "Running...";
+    }
+
     const start = performance.now();
     await engine.nextGeneration(rulePrompt, pInstance);
     engine.draw(pInstance);
     const elapsed = Math.round(performance.now() - start);
-    stepBtn.textContent = `${label} (${elapsed}ms)`;
-    stepBtn.disabled = false;
-  } else {
-    await engine.nextGeneration(rulePrompt, pInstance);
-    engine.draw(pInstance);
+
+    if (stepBtn) stepBtn.textContent = `${desktopLabel} (${elapsed}ms)`;
+    if (mobileBtn) mobileBtn.textContent = `${mobileLabel} (${elapsed}ms)`;
+  } finally {
+    if (stepBtn) stepBtn.disabled = false;
+    if (mobileBtn) mobileBtn.disabled = false;
+    isRunning = false;
   }
 };
 
@@ -63,6 +87,9 @@ const sketch = (p: p5) => {
     ) as HTMLInputElement | null;
     const stepBtn = document.getElementById(
       "stepBtn"
+    ) as HTMLButtonElement | null;
+    const mobileStepBtn = document.getElementById(
+      "mobileStepBtn"
     ) as HTMLButtonElement | null;
     const promptInput = document.getElementById("promptInput") as
       | HTMLTextAreaElement
@@ -122,7 +149,7 @@ const sketch = (p: p5) => {
           if (!canvasEl) return;
           const wrap = document.getElementById("canvasWrap");
           const parent = wrap || canvasEl.parentElement;
-          if (!parent) return;
+            if (!parent) return;
           const base = engine.cols * CELL_SIZE;
           const available = parent.clientWidth;
           const display = Math.min(base, available);
@@ -133,12 +160,19 @@ const sketch = (p: p5) => {
     });
 
     stepBtn?.addEventListener("click", async () => {
+      if (isRunning) return;
       await runGeneration(promptInput, stepBtn);
     });
 
-    // Keyboard shortcut Ctrl+Enter for step (always allowed now)
+    mobileStepBtn?.addEventListener("click", async () => {
+      if (isRunning) return;
+      await runGeneration(promptInput, stepBtn); // stepBtn drives label; mobile handled inside runGeneration
+    });
+
+    // Keyboard shortcut Ctrl+Enter for step (respect running state)
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (isRunning) return; // ignore while running
         e.preventDefault();
         runGeneration(promptInput, stepBtn);
       }
