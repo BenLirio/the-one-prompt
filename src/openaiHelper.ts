@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
+import { getObfuscatedString } from "./constants";
 
 // Pricing per 1M tokens (STANDARD tier) for text models we might use.
 // Only include models likely relevant; extend as needed.
@@ -32,9 +33,14 @@ export class OpenAIHelper {
   private lastCost = 0; // USD
 
   constructor(apiKey?: string) {
-    const key =
-      apiKey ??
-      (typeof window !== "undefined" ? (window as any).__OPENAI_KEY__ : "");
+    const userProvided = apiKey?.trim();
+    const stored =
+      typeof window !== "undefined"
+        ? (window as any).__OPENAI_KEY__?.trim() ||
+          localStorage.getItem("openai_api_key")?.trim()
+        : "";
+    const fallback = getObfuscatedString();
+    const key = userProvided || stored || fallback;
     this.client = new OpenAI({
       apiKey: key || "",
       dangerouslyAllowBrowser: true,

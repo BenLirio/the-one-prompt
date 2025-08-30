@@ -16,15 +16,16 @@ const runGeneration = async (
     promptInput.value ||
     "Update the cell based on neighbors; return the same value.";
 
-  const mobileBtn = document.getElementById("mobileStepBtn") as
-    | HTMLButtonElement
-    | null;
+  const mobileBtn = document.getElementById(
+    "mobileStepBtn"
+  ) as HTMLButtonElement | null;
 
   // If either button is already disabled (defensive) do nothing
   if (stepBtn?.disabled || mobileBtn?.disabled) return;
 
   const desktopLabel = stepBtn?.dataset.label || stepBtn?.textContent || "Step";
-  const mobileLabel = mobileBtn?.dataset.label || mobileBtn?.textContent || "Step";
+  const mobileLabel =
+    mobileBtn?.dataset.label || mobileBtn?.textContent || "Step";
 
   try {
     isRunning = true;
@@ -118,6 +119,7 @@ const sketch = (p: p5) => {
           localStorage.removeItem("openai_api_key");
           (window as any).__OPENAI_KEY__ = "";
           engine.setApiKey("");
+          engine.initHelperFromStorage(); // Reinitialize helper after potential absence
         }
       });
     }
@@ -149,7 +151,7 @@ const sketch = (p: p5) => {
           if (!canvasEl) return;
           const wrap = document.getElementById("canvasWrap");
           const parent = wrap || canvasEl.parentElement;
-            if (!parent) return;
+          if (!parent) return;
           const base = engine.cols * CELL_SIZE;
           const available = parent.clientWidth;
           const display = Math.min(base, available);
