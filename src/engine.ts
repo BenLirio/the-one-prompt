@@ -228,10 +228,10 @@ export class Engine {
         const color = parseHexColor(content);
         if (color) {
           p.push();
-            p.noStroke();
-            if (color.a !== undefined) p.fill(color.r, color.g, color.b, color.a);
-            else p.fill(color.r, color.g, color.b);
-            p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+          p.noStroke();
+          if (color.a !== undefined) p.fill(color.r, color.g, color.b, color.a);
+          else p.fill(color.r, color.g, color.b);
+          p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
           p.pop();
         } else {
           // Only layout & draw text if not a color cell
@@ -242,7 +242,8 @@ export class Engine {
           p.textSize(layout.fontSize);
           p.fill(0);
           const totalTextHeight = layout.totalHeight;
-          let startY = cellY + (CELL_SIZE - totalTextHeight) / 2 + layout.lineHeight * 0.8;
+          let startY =
+            cellY + (CELL_SIZE - totalTextHeight) / 2 + layout.lineHeight * 0.8;
           for (const line of layout.lines) {
             p.textAlign(p.CENTER, p.BASELINE);
             p.text(line, cellX + CELL_SIZE / 2, startY);
@@ -253,9 +254,9 @@ export class Engine {
         // Loading overlay (on top of base color if any)
         if (this.loadingCells.has(this.cellKey(x, y))) {
           p.push();
-            p.noStroke();
-            p.fill(0, 0, 0, 60);
-            p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+          p.noStroke();
+          p.fill(0, 0, 0, 60);
+          p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
           p.pop();
         }
       }
@@ -263,23 +264,23 @@ export class Engine {
 
     // Draw grid once for crisper, more prominent lines
     p.push();
-      p.noFill();
-      p.stroke(120); // darker than previous 200 for stronger contrast
-      p.strokeWeight(1.5); // slightly thicker
-      const w = this.cols * CELL_SIZE;
-      const h = this.rows * CELL_SIZE;
-      // Outer rectangle
-      p.rect(0, 0, w, h);
-      // Internal vertical lines
-      for (let x = 1; x < this.cols; x++) {
-        const xx = x * CELL_SIZE;
-        p.line(xx, 0, xx, h);
-      }
-      // Internal horizontal lines
-      for (let y = 1; y < this.rows; y++) {
-        const yy = y * CELL_SIZE;
-        p.line(0, yy, w, yy);
-      }
+    p.noFill();
+    p.stroke(120); // darker than previous 200 for stronger contrast
+    p.strokeWeight(1.5); // slightly thicker
+    const w = this.cols * CELL_SIZE;
+    const h = this.rows * CELL_SIZE;
+    // Outer rectangle
+    p.rect(0, 0, w, h);
+    // Internal vertical lines
+    for (let x = 1; x < this.cols; x++) {
+      const xx = x * CELL_SIZE;
+      p.line(xx, 0, xx, h);
+    }
+    // Internal horizontal lines
+    for (let y = 1; y < this.rows; y++) {
+      const yy = y * CELL_SIZE;
+      p.line(0, yy, w, yy);
+    }
     p.pop();
   }
 }
