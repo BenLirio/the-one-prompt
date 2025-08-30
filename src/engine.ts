@@ -10,6 +10,30 @@ import {
   DEFAULT_PROMPT,
 } from "./constants";
 
+// Helper to parse hash hex colors like #RGB, #RGBA, #RRGGBB, #RRGGBBAA
+interface ParsedHexColor { r: number; g: number; b: number; a?: number }
+function parseHexColor(raw: string | undefined): ParsedHexColor | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)) return null;
+  const hex = s.slice(1);
+  let r: number, g: number, b: number, a: number | undefined;
+  if (hex.length === 3 || hex.length === 4) {
+    // #RGB or #RGBA (each nibble duplicated)
+    const rn = parseInt(hex[0] + hex[0], 16);
+    const gn = parseInt(hex[1] + hex[1], 16);
+    const bn = parseInt(hex[2] + hex[2], 16);
+    r = rn; g = gn; b = bn;
+    if (hex.length === 4) a = parseInt(hex[3] + hex[3], 16);
+  } else if (hex.length === 6 || hex.length === 8) {
+    r = parseInt(hex.slice(0, 2), 16);
+    g = parseInt(hex.slice(2, 4), 16);
+    b = parseInt(hex.slice(4, 6), 16);
+    if (hex.length === 8) a = parseInt(hex.slice(6, 8), 16);
+  } else return null;
+  return { r, g, b, a };
+}
+
 // Encapsulates grid state, OpenAI interaction, rate limiting & drawing logic
 export class Engine {
   cols: number;
@@ -174,8 +198,19 @@ export class Engine {
       for (let x = 0; x < this.cols; x++) {
         const cellX = x * CELL_SIZE;
         const cellY = y * CELL_SIZE;
-        p.noFill();
-        p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+
+        const content = this.grid[y][x].text;
+        const color = parseHexColor(content);
+        if (color) {
+          p.push();
+            p.noStroke();
+            if (color.a !== undefined) p.fill(color.r, color.g, color.b, color.a);
+            else p.fill(color.r, color.g, color.b);
+            p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+          p.pop();
+        }
+
+        // Loading overlay (on top of base color if any)
         if (this.loadingCells.has(this.cellKey(x, y))) {
           p.push();
           p.noStroke();
@@ -183,22 +218,29 @@ export class Engine {
           p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
           p.pop();
         }
-        const content = this.grid[y][x].text;
-        const layout = layoutCellText(p, content, CELL_SIZE, {
-          maxFactor: 0.55,
-          minFactor: 0.08,
-        });
-        p.textSize(layout.fontSize);
-        p.fill(0);
-        const totalTextHeight = layout.totalHeight;
-        let startY =
-          cellY + (CELL_SIZE - totalTextHeight) / 2 + layout.lineHeight * 0.8;
-        for (const line of layout.lines) {
-          p.textAlign(p.CENTER, p.BASELINE);
-          p.text(line, cellX + CELL_SIZE / 2, startY);
-          startY += layout.lineHeight;
+
+        if (!color) {
+          // Only layout & draw text if not a color cell
+          const layout = layoutCellText(p, content, CELL_SIZE, {
+            maxFactor: 0.55,
+            minFactor: 0.08,
+          });
+          p.textSize(layout.fontSize);
+          p.fill(0);
+          const totalTextHeight = layout.totalHeight;
+          let startY =
+            cellY + (CELL_SIZE - totalTextHeight) / 2 + layout.lineHeight * 0.8;
+          for (const line of layout.lines) {
+            p.textAlign(p.CENTER, p.BASELINE);
+            p.text(line, cellX + CELL_SIZE / 2, startY);
+            startY += layout.lineHeight;
+          }
         }
+
+        // Border last so it's visible
         p.noFill();
+        p.stroke(200);
+        p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
       }
     }
   }
