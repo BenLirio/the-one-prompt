@@ -399,14 +399,12 @@
         <div class="row wrap">
           <div class="field" style="flex:0 0 105px;">
             <label for="gridSizeInput">Grid Size</label>
-            <input id="gridSizeInput" type="number" min="1" max="50" value="5" inputmode="numeric" />
+            <input id="gridSizeInput" type="range" min="1" max="8" value="5" />
           </div>
           <div class="field grow">
             <label>&nbsp;</label>
             <div class="row wrap" style="flex:1;">
-              <button id="resizeBtn" title="Apply new grid size" class="large">Resize</button>
               <button id="stepBtn" title="Run one generation" class="large">Step</button>
-              <button id="autoBtn" title="Toggle auto-run generations" class="large">Auto</button>
             </div>
           </div>
         </div>

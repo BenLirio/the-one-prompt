@@ -4,7 +4,6 @@ import { DEFAULT_GRID_SIZE, CELL_SIZE } from "./constants";
 
 let engine: Engine;
 let pInstance: p5;
-let autoInterval: number | null = null;
 
 const runGeneration = async (
   promptInput: HTMLTextAreaElement | HTMLInputElement | null,
@@ -62,12 +61,8 @@ const sketch = (p: p5) => {
     const sizeInput = document.getElementById(
       "gridSizeInput"
     ) as HTMLInputElement | null;
-    const resizeBtn = document.getElementById("resizeBtn");
     const stepBtn = document.getElementById(
       "stepBtn"
-    ) as HTMLButtonElement | null;
-    const autoBtn = document.getElementById(
-      "autoBtn"
     ) as HTMLButtonElement | null;
     const promptInput = document.getElementById("promptInput") as
       | HTMLTextAreaElement
@@ -113,12 +108,27 @@ const sketch = (p: p5) => {
       });
     }
 
-    resizeBtn?.addEventListener("click", () => {
+    // Automatic resize on slider movement (range 1-8)
+    sizeInput?.addEventListener("input", () => {
       const val = sizeInput ? parseInt(sizeInput.value, 10) : engine.cols;
-      if (!isNaN(val) && val > 0 && val <= 50) {
+      if (!isNaN(val) && val > 0 && val <= 8) {
         engine.resize(val, p);
         engine.draw(p);
-        fitCanvas();
+        // fitCanvas is in scope
+        (function resizeCanvasFit() {
+          const canvasEl = (p as any)?._renderer?.canvas as
+            | HTMLCanvasElement
+            | undefined;
+          if (!canvasEl) return;
+          const wrap = document.getElementById("canvasWrap");
+          const parent = wrap || canvasEl.parentElement;
+          if (!parent) return;
+          const base = engine.cols * CELL_SIZE;
+          const available = parent.clientWidth;
+          const display = Math.min(base, available);
+          canvasEl.style.width = display + "px";
+          canvasEl.style.height = display + "px";
+        })();
       }
     });
 
@@ -126,30 +136,11 @@ const sketch = (p: p5) => {
       await runGeneration(promptInput, stepBtn);
     });
 
-    // Auto run toggle
-    autoBtn?.addEventListener("click", () => {
-      if (autoInterval !== null) {
-        window.clearInterval(autoInterval);
-        autoInterval = null;
-        autoBtn.textContent = "Auto";
-        stepBtn && (stepBtn.disabled = false);
-      } else {
-        const delay = 600; // ms per generation
-        autoBtn.textContent = "Stop";
-        stepBtn && (stepBtn.disabled = true);
-        autoInterval = window.setInterval(() => {
-          runGeneration(promptInput, null);
-        }, delay);
-      }
-    });
-
-    // Keyboard shortcut Ctrl+Enter for step
+    // Keyboard shortcut Ctrl+Enter for step (always allowed now)
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        if (autoInterval === null) {
-          runGeneration(promptInput, stepBtn);
-        }
+        runGeneration(promptInput, stepBtn);
       }
     });
 

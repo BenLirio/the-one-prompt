@@ -75,15 +75,27 @@ export class Engine {
   // --- Grid management ---
   private createGrid(): Cell[][] {
     return Array.from({ length: this.rows }, () =>
-      Array.from({ length: this.cols }, () => ({
-        text: Math.random() > 0.5 ? "1" : "0",
-      }))
+      Array.from({ length: this.cols }, () => ({ text: "" }))
     );
   }
   resize(newSize: number, p?: p5) {
+    const oldCols = this.cols;
+    const oldRows = this.rows;
+    const oldGrid = this.grid;
+    if (newSize === oldCols && newSize === oldRows) return;
+    const newGrid: Cell[][] = Array.from({ length: newSize }, () =>
+      Array.from({ length: newSize }, () => ({ text: "" }))
+    );
+    const copyCols = Math.min(oldCols, newSize);
+    const copyRows = Math.min(oldRows, newSize);
+    for (let y = 0; y < copyRows; y++) {
+      for (let x = 0; x < copyCols; x++) {
+        newGrid[y][x].text = oldGrid[y][x].text;
+      }
+    }
     this.cols = newSize;
     this.rows = newSize;
-    this.grid = this.createGrid();
+    this.grid = newGrid;
     if (p) p.resizeCanvas(this.cols * CELL_SIZE, this.rows * CELL_SIZE);
   }
 
