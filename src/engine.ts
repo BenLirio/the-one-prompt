@@ -1,0 +1,194 @@
+import p5 from "p5";
+import { kernel, Cell } from "./kernel";
+import { OpenAIHelper } from "./openaiHelper";
+import { layoutCellText } from "./textLayout";
+import { RateLimiter } from "./rateLimiter";
+import {
+  CELL_SIZE,
+  MAX_CONCURRENT,
+  MIN_INTERVAL_MS,
+  DEFAULT_PROMPT,
+} from "./constants";
+
+// Encapsulates grid state, OpenAI interaction, rate limiting & drawing logic
+export class Engine {
+  cols: number;
+  rows: number;
+  grid: Cell[][] = [];
+  private helper: OpenAIHelper | null = null;
+  private tokenDiv: HTMLElement | null = null;
+  private generationInProgress = false;
+  private loadingCells = new Set<string>();
+  private limiter = new RateLimiter(MAX_CONCURRENT, MIN_INTERVAL_MS);
+
+  constructor(cols: number, rows: number) {
+    this.cols = cols;
+    this.rows = rows;
+    this.grid = this.createGrid();
+  }
+
+  // --- Initialization & configuration ---
+  initHelperFromStorage() {
+    const stored = localStorage.getItem("openai_api_key") || "";
+    if (stored) (window as any).__OPENAI_KEY__ = stored;
+    this.helper = new OpenAIHelper(stored || undefined);
+  }
+  setApiKey(key: string) {
+    this.helper = new OpenAIHelper(key || undefined);
+  }
+  setTokenDiv(div: HTMLElement) {
+    this.tokenDiv = div;
+  }
+
+  // --- Grid management ---
+  private createGrid(): Cell[][] {
+    return Array.from({ length: this.rows }, () =>
+      Array.from({ length: this.cols }, () => ({
+        text: Math.random() > 0.5 ? "1" : "0",
+      }))
+    );
+  }
+  resize(newSize: number, p?: p5) {
+    this.cols = newSize;
+    this.rows = newSize;
+    this.grid = this.createGrid();
+    if (p) p.resizeCanvas(this.cols * CELL_SIZE, this.rows * CELL_SIZE);
+  }
+
+  // --- Utility ---
+  private cellKey(x: number, y: number) {
+    return `${x},${y}`;
+  }
+  private snapshot(): Cell[][] {
+    return this.grid.map((row) => row.map((c) => ({ ...c })));
+  }
+
+  // --- Token display ---
+  updateTokenDisplay() {
+    if (!this.helper || !this.tokenDiv) return;
+    const cum = this.helper.getCumulativeUsage();
+    this.tokenDiv.textContent = `Cost: $${cum.cost.toFixed(4)}`;
+  }
+
+  // --- Single cell update ---
+  async updateSingleCell(
+    cx: number,
+    cy: number,
+    prompt: string = DEFAULT_PROMPT,
+    p?: p5
+  ) {
+    if (this.generationInProgress) return;
+    if (!this.helper) return;
+    if (cy < 0 || cy >= this.rows || cx < 0 || cx >= this.cols) return;
+    const snapshot = this.snapshot();
+    const upY = (cy - 1 + this.rows) % this.rows;
+    const downY = (cy + 1) % this.rows;
+    const leftX = (cx - 1 + this.cols) % this.cols;
+    const rightX = (cx + 1) % this.cols;
+    await this.limiter.acquire();
+    const key = this.cellKey(cx, cy);
+    this.loadingCells.add(key);
+    if (p) this.draw(p);
+    try {
+      const newText = await kernel(
+        this.helper,
+        prompt,
+        snapshot[upY][cx],
+        snapshot[downY][cx],
+        snapshot[cy][leftX],
+        snapshot[cy][rightX],
+        snapshot[cy][cx]
+      );
+      this.grid[cy][cx].text = newText;
+    } catch (e) {
+      console.error("Single cell kernel error", e);
+    } finally {
+      this.loadingCells.delete(key);
+      if (p) this.draw(p);
+      this.updateTokenDisplay();
+      this.limiter.release();
+    }
+  }
+
+  // --- Generation step (all cells) ---
+  async nextGeneration(prompt: string, p?: p5) {
+    this.generationInProgress = true;
+    const snapshot = this.snapshot();
+    const tasks: Promise<void>[] = [];
+    for (let y = 0; y < this.rows; y++) {
+      for (let x = 0; x < this.cols; x++) {
+        const task = (async (cx: number, cy: number) => {
+          await this.limiter.acquire();
+          const key = this.cellKey(cx, cy);
+          this.loadingCells.add(key);
+          if (p) this.draw(p);
+          try {
+            const upY = (cy - 1 + this.rows) % this.rows;
+            const downY = (cy + 1) % this.rows;
+            const leftX = (cx - 1 + this.cols) % this.cols;
+            const rightX = (cx + 1) % this.cols;
+            const newText = await kernel(
+              this.helper!,
+              prompt,
+              snapshot[upY][cx],
+              snapshot[downY][cx],
+              snapshot[cy][leftX],
+              snapshot[cy][rightX],
+              snapshot[cy][cx]
+            );
+            this.grid[cy][cx].text = newText;
+          } catch (e) {
+            console.error("Kernel error", e);
+          } finally {
+            this.loadingCells.delete(key);
+            if (p) this.draw(p);
+            this.updateTokenDisplay();
+            this.limiter.release();
+          }
+        })(x, y);
+        tasks.push(task);
+      }
+    }
+    await Promise.all(tasks);
+    this.generationInProgress = false;
+  }
+
+  // --- Drawing ---
+  draw(p: p5) {
+    p.background(255);
+    p.fill(0);
+    p.stroke(200);
+    p.strokeWeight(1);
+    for (let y = 0; y < this.rows; y++) {
+      for (let x = 0; x < this.cols; x++) {
+        const cellX = x * CELL_SIZE;
+        const cellY = y * CELL_SIZE;
+        p.noFill();
+        p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+        if (this.loadingCells.has(this.cellKey(x, y))) {
+          p.push();
+          p.noStroke();
+          p.fill(0, 0, 0, 60);
+          p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+          p.pop();
+        }
+        const content = this.grid[y][x].text;
+        const layout = layoutCellText(p, content, CELL_SIZE, {
+          maxFactor: 0.55,
+          minFactor: 0.08,
+        });
+        p.textSize(layout.fontSize);
+        p.fill(0);
+        const totalTextHeight = layout.totalHeight;
+        let startY =
+          cellY + (CELL_SIZE - totalTextHeight) / 2 + layout.lineHeight * 0.8;
+        for (const line of layout.lines) {
+          p.textAlign(p.CENTER, p.BASELINE);
+          p.text(line, cellX + CELL_SIZE / 2, startY);
+          startY += layout.lineHeight;
+        }
+        p.noFill();
+      }
+    }
+  }
+}
