@@ -135,7 +135,7 @@
     }
 
     #promptInput {
-      min-height: 72px;
+      min-height: 96px;
     }
 
     input[type=number] {
@@ -389,6 +389,70 @@
     #toggleSidebarBtn.active {
       background: #32465b;
     }
+
+    /* Hints details styling */
+    details.hints {
+      background: #14202b;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .55rem .75rem .7rem;
+      font-size: .7rem;
+    }
+
+    details.hints[open] {
+      background: #192633;
+    }
+
+    details.hints summary {
+      cursor: pointer;
+      font-weight: 600;
+      list-style: none;
+      outline: none;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      color: var(--text);
+    }
+
+    details.hints summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details.hints summary:before {
+      content: '\25B8';
+      /* triangle */
+      transition: transform var(--trans-fast);
+      font-size: .75rem;
+      opacity: .8;
+    }
+
+    details.hints[open] summary:before {
+      transform: rotate(90deg);
+    }
+
+    details.hints ul {
+      margin: .5rem 0 .2rem;
+      padding-left: 1rem;
+      line-height: 1.35;
+    }
+
+    details.hints code {
+      background: #10161f;
+      padding: .15rem .3rem;
+      border-radius: 4px;
+      font: 600 .65rem var(--mono);
+      color: #8cc2ff;
+    }
+
+    details.hints .mini-example {
+      margin: .4rem 0 .6rem;
+      padding: .45rem .55rem;
+      background: #101923;
+      border: 1px solid #1f2c39;
+      border-radius: 6px;
+      font: 500 .6rem/1.35 var(--mono);
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 
@@ -396,7 +460,7 @@
   <div id="mobileNavBar">
     <h1>The One Prompt</h1>
     <div class="row" style="gap:.4rem;">
-      <button id="toggleSidebarBtn" aria-expanded="true">Controls</button>
+      <button id="toggleSidebarBtn" aria-expanded="true">Hide</button>
       <button id="mobileStepBtn" disabled>Step</button>
     </div>
   </div>
@@ -409,9 +473,41 @@
       <div class="panelGroup">
         <div class="field">
           <label for="promptInput">Prompt / Rule</label>
-          <textarea id="promptInput" inputmode="text" placeholder="Describe how a cell should transform given its four cardinal neighbors and its own value."></textarea>
-          <div class="hotkeys"><span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> Step</span><span><kbd>Tap</kbd> Cell update</span></div>
+          <textarea id="promptInput" inputmode="text" placeholder="Describe how a cell should transform given its four cardinal neighbors values (top, bottom, left, right)."></textarea>
+          <div class="hotkeys"><span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> Step</span></div>
         </div>
+        <details class="hints" id="hintsHelp">
+          <summary>Hints & Examples</summary>
+          <ul>
+            <li><strong>Template (cellPrompt.md)</strong>: The model receives a filled-in markdown template:
+              <div class="mini-example">Prompt: {{USER_PROMPT}}
+
+                Neighbor values are:
+                - top: (top cell text)
+                - bottom: (bottom cell text)
+                - left: (left cell text)
+                - right: (right cell text)
+
+                Return strictly JSON with shape { "resultValue": string }</div>
+              Your text goes into <code>{{USER_PROMPT}}</code>. The placeholders for neighbors/current are replaced before sending. The model MUST answer only JSON like <code>{"resultValue":"next text"}</code> which becomes the cell's new content.
+            </li>
+            <li><strong>Hex color shortcut</strong>: If your <code>resultValue</code> is a valid hex color (<code>#RGB</code>, <code>#RGBA</code>, <code>#RRGGBB</code>, or <code>#RRGGBBAA</code>) the cell is rendered as a solid color (alpha supported) and the text is not drawn. Any other string is rendered as laid-out text.</li>
+          </ul>
+          <div><strong>Prompt tips</strong>:
+            <ul>
+              <li>Be explicit about patterns, e.g. "If right neighbor starts with '#' treat it as color".</li>
+              <li>Return short strings to fit nicely; long text will wrap & shrink.</li>
+              <li>You can propagate values: "Return the right neighbor's value" simply copies it.</li>
+            </ul>
+          </div>
+          <div style="margin-top:.4rem;">
+            <strong>Minimal examples</strong>
+            <div class="mini-example">Copy right neighbor:
+              "Return the exact right neighbor value."</div>
+            <div class="mini-example">Make a gradient:
+              "If right neighbor is a hex color #RRGGBB, darken it slightly; otherwise start with #3366ff."</div>
+          </div>
+        </details>
         <div class="row wrap">
           <div class="field" style="flex:0 0 105px;">
             <label for="gridSizeInput">Grid Size</label>
@@ -450,23 +546,31 @@
     const toggleBtn = document.getElementById('toggleSidebarBtn');
     const sidebar = document.getElementById('sidebar');
     const mobileStepBtn = document.getElementById('mobileStepBtn');
-    toggleBtn?.addEventListener('click', () => {
-      const collapsed = sidebar?.classList.toggle('collapsed');
+
+    function syncToggleButton() {
+      const collapsed = sidebar?.classList.contains('collapsed');
       if (toggleBtn) {
         toggleBtn.classList.toggle('active', !collapsed);
         toggleBtn.setAttribute('aria-expanded', String(!collapsed));
         toggleBtn.textContent = collapsed ? 'Controls' : 'Hide';
       }
+    }
+
+    // Initial sync on load (handles first paint after refresh)
+    syncToggleButton();
+
+    toggleBtn?.addEventListener('click', () => {
+      sidebar?.classList.toggle('collapsed');
+      syncToggleButton();
     });
+
     // Mirror mobile Step to desktop Step
     mobileStepBtn?.addEventListener('click', () => {
       document.getElementById('stepBtn')?.dispatchEvent(new Event('click'));
       // Optionally collapse after step on small screens
       if (window.innerWidth < 900) {
         sidebar?.classList.add('collapsed');
-        toggleBtn?.setAttribute('aria-expanded', 'false');
-        toggleBtn?.classList.remove('active');
-        toggleBtn && (toggleBtn.textContent = 'Controls');
+        syncToggleButton();
       }
     });
   </script>
