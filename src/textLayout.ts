@@ -7,8 +7,6 @@ export interface LaidOutText {
   totalHeight: number;
 }
 
-// Compute wrapped lines and the largest font size that fits inside a square cell.
-// Tries progressively smaller font sizes until both width and height constraints pass.
 export function layoutCellText(
   p: p5,
   text: string,
@@ -21,34 +19,50 @@ export function layoutCellText(
   } = {}
 ): LaidOutText {
   const {
-    maxFactor = 0.55,
-    minFactor = 0.08,
+    maxFactor = 0.5, // slightly lower base
+    minFactor = 0.04, // allow much smaller text
     widthPad = 0.9,
     heightPad = 0.9,
   } = opts;
-  const maxFont = cellSize * maxFactor;
+  const raw = text || "";
+  const len = raw.length;
+  // Much more aggressive shrink: after 3 chars apply exponential decay.
+  // Each extra char multiplies by 0.8 -> rapid reduction.
+  const expPenalty = Math.pow(0.8, Math.max(0, len - 3));
+  const baseMaxFont = cellSize * maxFactor;
+  let dynamicMaxFont = baseMaxFont * expPenalty;
+  // For very long strings clamp directly to near-min.
+  if (len > 30) dynamicMaxFont = Math.min(dynamicMaxFont, cellSize * (minFactor * 1.15));
+  if (len > 60) dynamicMaxFont = cellSize * minFactor; // force smallest for extreme length
+  const maxFont = Math.max(cellSize * minFactor, dynamicMaxFont);
   const minFont = cellSize * minFactor;
   const targetWidth = cellSize * widthPad;
   const targetHeight = cellSize * heightPad;
-  const raw = text || "";
 
   // Early exit blank
   if (!raw.trim()) {
-    const fontSize = Math.max(minFont, Math.min(maxFont, cellSize * 0.2));
+    const fontSize = Math.max(minFont, Math.min(maxFont, cellSize * 0.14));
     return {
       fontSize,
       lines: [""],
-      lineHeight: fontSize * 1.1,
-      totalHeight: fontSize * 1.1,
+      lineHeight: fontSize * 1.05,
+      totalHeight: fontSize * 1.05,
     };
   }
 
+  // Prevent splitting short single words
+  const preventSplitShortSingle = !raw.includes(" ") && raw.length <= 12;
+
   // Attempt from large to small font sizes (simple decrement step)
-  const step = Math.max(1, Math.floor(maxFont / 16));
+  const step = Math.max(1, Math.floor(maxFont / 20));
   for (let fs = Math.floor(maxFont); fs >= minFont; fs -= step) {
     p.textSize(fs);
-    const lineHeight = fs * 1.1;
+    const lineHeight = fs * 1.05;
     const lines = wrap(raw, targetWidth, p);
+    if (preventSplitShortSingle && lines.length > 1) {
+      // word got split; continue shrinking instead of accepting split layout
+      continue;
+    }
     const totalHeight = lines.length * lineHeight;
     if (totalHeight <= targetHeight) {
       return { fontSize: fs, lines, lineHeight, totalHeight };
@@ -57,8 +71,12 @@ export function layoutCellText(
   // Fallback smallest
   const fs = Math.ceil(minFont);
   p.textSize(fs);
-  const lineHeight = fs * 1.1;
-  const lines = wrap(raw, targetWidth, p, true);
+  const lineHeight = fs * 1.05;
+  let lines = wrap(raw, targetWidth, p, true);
+  if (preventSplitShortSingle && lines.length > 1) {
+    // allow slight overflow instead of wrapping tiny word
+    lines = [raw];
+  }
   const totalHeight = lines.length * lineHeight;
   return { fontSize: fs, lines, lineHeight, totalHeight };
 }

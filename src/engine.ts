@@ -115,39 +115,50 @@ export class Engine {
     this.generationInProgress = true;
     const snapshot = this.snapshot();
     const tasks: Promise<void>[] = [];
+    // Collect all cell coordinates first
+    const coords: Array<{ x: number; y: number }> = [];
     for (let y = 0; y < this.rows; y++) {
       for (let x = 0; x < this.cols; x++) {
-        const task = (async (cx: number, cy: number) => {
-          await this.limiter.acquire();
-          const key = this.cellKey(cx, cy);
-          this.loadingCells.add(key);
-          if (p) this.draw(p);
-          try {
-            const upY = (cy - 1 + this.rows) % this.rows;
-            const downY = (cy + 1) % this.rows;
-            const leftX = (cx - 1 + this.cols) % this.cols;
-            const rightX = (cx + 1) % this.cols;
-            const newText = await kernel(
-              this.helper!,
-              prompt,
-              snapshot[upY][cx],
-              snapshot[downY][cx],
-              snapshot[cy][leftX],
-              snapshot[cy][rightX],
-              snapshot[cy][cx]
-            );
-            this.grid[cy][cx].text = newText;
-          } catch (e) {
-            console.error("Kernel error", e);
-          } finally {
-            this.loadingCells.delete(key);
-            if (p) this.draw(p);
-            this.updateTokenDisplay();
-            this.limiter.release();
-          }
-        })(x, y);
-        tasks.push(task);
+        coords.push({ x, y });
       }
+    }
+    // Fisher-Yates shuffle for random order each generation
+    for (let i = coords.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [coords[i], coords[j]] = [coords[j], coords[i]];
+    }
+    // Launch tasks in randomized order
+    for (const { x, y } of coords) {
+      const task = (async (cx: number, cy: number) => {
+        await this.limiter.acquire();
+        const key = this.cellKey(cx, cy);
+        this.loadingCells.add(key);
+        if (p) this.draw(p);
+        try {
+          const upY = (cy - 1 + this.rows) % this.rows;
+          const downY = (cy + 1) % this.rows;
+          const leftX = (cx - 1 + this.cols) % this.cols;
+          const rightX = (cx + 1) % this.cols;
+          const newText = await kernel(
+            this.helper!,
+            prompt,
+            snapshot[upY][cx],
+            snapshot[downY][cx],
+            snapshot[cy][leftX],
+            snapshot[cy][rightX],
+            snapshot[cy][cx]
+          );
+          this.grid[cy][cx].text = newText;
+        } catch (e) {
+          console.error("Kernel error", e);
+        } finally {
+          this.loadingCells.delete(key);
+          if (p) this.draw(p);
+          this.updateTokenDisplay();
+          this.limiter.release();
+        }
+      })(x, y);
+      tasks.push(task);
     }
     await Promise.all(tasks);
     this.generationInProgress = false;
