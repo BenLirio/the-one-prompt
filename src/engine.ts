@@ -11,11 +11,17 @@ import {
 } from "./constants";
 
 // Helper to parse hash hex colors like #RGB, #RGBA, #RRGGBB, #RRGGBBAA
-interface ParsedHexColor { r: number; g: number; b: number; a?: number }
+interface ParsedHexColor {
+  r: number;
+  g: number;
+  b: number;
+  a?: number;
+}
 function parseHexColor(raw: string | undefined): ParsedHexColor | null {
   if (!raw) return null;
   const s = raw.trim();
-  if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)) return null;
+  if (!/^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s))
+    return null;
   const hex = s.slice(1);
   let r: number, g: number, b: number, a: number | undefined;
   if (hex.length === 3 || hex.length === 4) {
@@ -23,7 +29,9 @@ function parseHexColor(raw: string | undefined): ParsedHexColor | null {
     const rn = parseInt(hex[0] + hex[0], 16);
     const gn = parseInt(hex[1] + hex[1], 16);
     const bn = parseInt(hex[2] + hex[2], 16);
-    r = rn; g = gn; b = bn;
+    r = rn;
+    g = gn;
+    b = bn;
     if (hex.length === 4) a = parseInt(hex[3] + hex[3], 16);
   } else if (hex.length === 6 || hex.length === 8) {
     r = parseInt(hex.slice(0, 2), 16);
@@ -91,7 +99,7 @@ export class Engine {
   updateTokenDisplay() {
     if (!this.helper || !this.tokenDiv) return;
     const cum = this.helper.getCumulativeUsage();
-    this.tokenDiv.textContent = `Cost: $${cum.cost.toFixed(4)}`;
+    this.tokenDiv.textContent = `$${cum.cost.toFixed(4)}`;
   }
 
   // --- Single cell update ---
@@ -203,10 +211,10 @@ export class Engine {
         const color = parseHexColor(content);
         if (color) {
           p.push();
-            p.noStroke();
-            if (color.a !== undefined) p.fill(color.r, color.g, color.b, color.a);
-            else p.fill(color.r, color.g, color.b);
-            p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
+          p.noStroke();
+          if (color.a !== undefined) p.fill(color.r, color.g, color.b, color.a);
+          else p.fill(color.r, color.g, color.b);
+          p.rect(cellX, cellY, CELL_SIZE, CELL_SIZE);
           p.pop();
         }
 

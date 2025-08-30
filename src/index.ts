@@ -4,6 +4,31 @@ import { DEFAULT_GRID_SIZE, CELL_SIZE } from "./constants";
 
 let engine: Engine;
 let pInstance: p5;
+let autoInterval: number | null = null;
+
+const runGeneration = async (
+  promptInput: HTMLTextAreaElement | HTMLInputElement | null,
+  stepBtn: HTMLButtonElement | null
+) => {
+  if (!promptInput) return;
+  const rulePrompt =
+    promptInput.value ||
+    "Update the cell based on neighbors; return the same value.";
+  if (stepBtn) {
+    stepBtn.disabled = true;
+    const label = stepBtn.dataset.label || "Step";
+    stepBtn.textContent = "Running...";
+    const start = performance.now();
+    await engine.nextGeneration(rulePrompt, pInstance);
+    engine.draw(pInstance);
+    const elapsed = Math.round(performance.now() - start);
+    stepBtn.textContent = `${label} (${elapsed}ms)`;
+    stepBtn.disabled = false;
+  } else {
+    await engine.nextGeneration(rulePrompt, pInstance);
+    engine.draw(pInstance);
+  }
+};
 
 const sketch = (p: p5) => {
   pInstance = p;
@@ -24,14 +49,21 @@ const sketch = (p: p5) => {
     const stepBtn = document.getElementById(
       "stepBtn"
     ) as HTMLButtonElement | null;
-    const promptInput = document.getElementById(
-      "promptInput"
-    ) as HTMLInputElement | null;
+    const autoBtn = document.getElementById(
+      "autoBtn"
+    ) as HTMLButtonElement | null;
+    const promptInput = document.getElementById("promptInput") as
+      | HTMLTextAreaElement
+      | HTMLInputElement
+      | null;
     const apiKeyInput = document.getElementById(
       "apiKeyInput"
     ) as HTMLInputElement | null;
-    const tokenDiv = document.getElementById("tokenUsage");
-    if (tokenDiv) engine.setTokenDiv(tokenDiv);
+    const toggleApiBtn = document.getElementById(
+      "toggleApiKey"
+    ) as HTMLButtonElement | null;
+    const tokenCost = document.getElementById("tokenCost");
+    if (tokenCost) engine.setTokenDiv(tokenCost);
 
     // API key persistence
     if (apiKeyInput) {
@@ -51,6 +83,19 @@ const sketch = (p: p5) => {
       });
     }
 
+    // Toggle API key visibility
+    if (toggleApiBtn && apiKeyInput) {
+      toggleApiBtn.addEventListener("click", () => {
+        if (apiKeyInput.type === "password") {
+          apiKeyInput.type = "text";
+          toggleApiBtn.textContent = "Hide";
+        } else {
+          apiKeyInput.type = "password";
+          toggleApiBtn.textContent = "Show";
+        }
+      });
+    }
+
     resizeBtn?.addEventListener("click", () => {
       const val = sizeInput ? parseInt(sizeInput.value, 10) : engine.cols;
       if (!isNaN(val) && val > 0 && val <= 50) {
@@ -60,18 +105,34 @@ const sketch = (p: p5) => {
     });
 
     stepBtn?.addEventListener("click", async () => {
-      if (!promptInput) return;
-      const rulePrompt =
-        promptInput.value ||
-        "Update the cell based on neighbors; return the same value.";
-      if (stepBtn) stepBtn.disabled = true;
-      stepBtn!.textContent = "Running...";
-      const start = performance.now();
-      await engine.nextGeneration(rulePrompt, p);
-      engine.draw(p);
-      const elapsed = Math.round(performance.now() - start);
-      stepBtn!.textContent = `Step (${elapsed}ms)`;
-      if (stepBtn) stepBtn.disabled = false;
+      await runGeneration(promptInput, stepBtn);
+    });
+
+    // Auto run toggle
+    autoBtn?.addEventListener("click", () => {
+      if (autoInterval !== null) {
+        window.clearInterval(autoInterval);
+        autoInterval = null;
+        autoBtn.textContent = "Auto";
+        stepBtn && (stepBtn.disabled = false);
+      } else {
+        const delay = 600; // ms per generation
+        autoBtn.textContent = "Stop";
+        stepBtn && (stepBtn.disabled = true);
+        autoInterval = window.setInterval(() => {
+          runGeneration(promptInput, null);
+        }, delay);
+      }
+    });
+
+    // Keyboard shortcut Ctrl+Enter for step
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (autoInterval === null) {
+          runGeneration(promptInput, stepBtn);
+        }
+      }
     });
 
     // Canvas single-cell update
