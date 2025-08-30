@@ -2,10 +2,13 @@
   "name": "the-one-prompt",
   "version": "1.0.0",
   "main": "index.js",
+  "homepage": "https://BenLirio.github.io/the-one-prompt",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack",
-    "start": "webpack serve"
+    "build": "NODE_ENV=production webpack",
+    "start": "webpack serve",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "keywords": [],
   "author": "",
@@ -20,10 +23,11 @@
     "typescript": "^5.9.2",
     "webpack": "^5.101.3",
     "webpack-cli": "^6.0.1",
-    "webpack-dev-server": "^5.2.2"
+    "webpack-dev-server": "^5.2.2",
+    "gh-pages": "^6.0.0"
   },
   "dependencies": {
     "openai": "^5.16.0",
-    "zod": "^4.1.5"
+    "zod": "^3.23.8"
   }
 }
