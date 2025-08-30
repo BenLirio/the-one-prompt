@@ -12,6 +12,12 @@ const runGeneration = async (
 ) => {
   if (isRunning) return; // already running
   if (!promptInput) return;
+  // Prevent running full generation if no API key set
+  const keyPresent = !!(
+    (window as any).__OPENAI_KEY__ ||
+    localStorage.getItem("openai_api_key")?.trim()
+  );
+  if (!keyPresent) return;
   const rulePrompt =
     promptInput.value ||
     "Update the cell based on neighbors; return the same value.";
@@ -109,6 +115,15 @@ const sketch = (p: p5) => {
     if (apiKeyInput) {
       const stored = localStorage.getItem("openai_api_key");
       if (stored) apiKeyInput.value = stored;
+      const noKeyHint = document.getElementById("noKeyHint");
+      // Helper to refresh button disabled state
+      const refreshStepButtons = () => {
+        const present = !!apiKeyInput.value.trim();
+        if (stepBtn) stepBtn.disabled = !present;
+        if (mobileStepBtn) mobileStepBtn.disabled = !present;
+        if (noKeyHint) noKeyHint.style.display = present ? "none" : "block";
+      };
+      refreshStepButtons();
       apiKeyInput.addEventListener("change", () => {
         const val = apiKeyInput.value.trim();
         if (val) {
@@ -121,6 +136,7 @@ const sketch = (p: p5) => {
           engine.setApiKey("");
           engine.initHelperFromStorage(); // Reinitialize helper after potential absence
         }
+        refreshStepButtons();
       });
     }
 
@@ -163,11 +179,22 @@ const sketch = (p: p5) => {
 
     stepBtn?.addEventListener("click", async () => {
       if (isRunning) return;
+      // Skip if no key
+      const keyPresent = !!(
+        (window as any).__OPENAI_KEY__ ||
+        localStorage.getItem("openai_api_key")?.trim()
+      );
+      if (!keyPresent) return;
       await runGeneration(promptInput, stepBtn);
     });
 
     mobileStepBtn?.addEventListener("click", async () => {
       if (isRunning) return;
+      const keyPresent = !!(
+        (window as any).__OPENAI_KEY__ ||
+        localStorage.getItem("openai_api_key")?.trim()
+      );
+      if (!keyPresent) return;
       await runGeneration(promptInput, stepBtn); // stepBtn drives label; mobile handled inside runGeneration
     });
 
@@ -175,6 +202,11 @@ const sketch = (p: p5) => {
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         if (isRunning) return; // ignore while running
+        const keyPresent = !!(
+          (window as any).__OPENAI_KEY__ ||
+          localStorage.getItem("openai_api_key")?.trim()
+        );
+        if (!keyPresent) return;
         e.preventDefault();
         runGeneration(promptInput, stepBtn);
       }
